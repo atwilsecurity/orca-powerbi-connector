@@ -10,13 +10,24 @@ shared test.Contents = (optional ApiKey as text) =>
             #"authority" = "api.orcasecurity.io",
             #"accept" = "application/json, text/plain, */*",
             #"accept-language" = "en-US,en;q=0.9",
-            #"authorization" = "TOKEN <Put-token-here>",
+            #"authorization" = "TOKEN <add-your-token-here",
             #"content-type" = "application/json"
         ],
         
-        Source = try Json.Document(Web.Contents(BaseUrl, [Headers = Headers])) otherwise error "Failed to fetch or parse JSON",
-        Data = Source[data],
-        DataTable = Table.FromRecords(Data)
+        // Function to recursively fetch pages
+        FetchAllPages = (Url, AccumulatedData as list, optional NextPageToken as text) =>
+            let
+                PageUrl = if NextPageToken = null then Url else Url & "?next_page_token=" & Text.From(NextPageToken),
+                PageSource = Json.Document(Web.Contents(PageUrl, [Headers = Headers])),
+                PageData = PageSource[data],
+                NewAccumulatedData = AccumulatedData & PageData,
+                NextToken = if PageSource[has_next_page_token] = false then null else PageSource[next_page_token], // Assuming nextPageToken is the key for pagination
+                Result = if NextToken <> null then @FetchAllPages(Url, NewAccumulatedData, NextToken) else NewAccumulatedData
+                in
+                    Result,
+            
+        AllData = FetchAllPages(BaseUrl, {}),
+        DataTable = Table.FromRecords(AllData)
         
     in
         DataTable;
